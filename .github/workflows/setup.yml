@@ -9,55 +9,81 @@ jobs:
   download-libs:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Required to push changes
-    
+      contents: write  # Essential for pushing changes
+      pull-requests: write  # Needed if using protected branch
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Required for proper Git operations
-          token: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Download libraries
-        run: |
-          # Install required tools
-          sudo apt-get update
-          sudo apt-get install -y wget unzip
-          
-          # Create directories
-          mkdir -p docs/lib docs/tessdata
-          
-          # Download PDF.js
-          wget https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js -O docs/lib/pdf.min.js
-          wget https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js -O docs/lib/pdf.worker.min.js
+          fetch-depth: 0  # Required for proper Git history
+          token: ${{ secrets.GITHUB_TOKEN }}  # Explicitly use the token
 
-          # Download Tesseract.js
-          wget https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js -O docs/lib/tesseract.min.js
-          wget https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract-core.wasm.js -O docs/lib/tesseract-core.wasm.js
-          wget https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract-worker.min.js -O docs/lib/tesseract-worker.min.js
-
-          # Download docx.js
-          wget https://cdnjs.cloudflare.com/ajax/libs/docx/7.8.2/docx.min.js -O docs/lib/docx.min.js
-
-          # Download FileSaver.js
-          wget https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js -O docs/lib/FileSaver.min.js
-
-          # Download language data
-          wget https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/eng.traineddata -O docs/tessdata/eng.traineddata
-          wget https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/fra.traineddata -O docs/tessdata/fra.traineddata
-          wget https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/spa.traineddata -O docs/tessdata/spa.traineddata
-          wget https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/deu.traineddata -O docs/tessdata/deu.traineddata
-          
-      - name: Commit changes
+      - name: Setup Git config
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
+          git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(echo -n ${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }} | base64)"
+
+      - name: Download libraries
+        run: |
+          # Create directories if they don't exist
+          mkdir -p docs/lib docs/tessdata
+
+          # Download all required files with error handling
+          declare -A files=(
+            ["pdf.min.js"]="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"
+            ["pdf.worker.min.js"]="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js"
+            ["tesseract.min.js"]="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"
+            ["tesseract-core.wasm.js"]="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract-core.wasm.js"
+            ["tesseract-worker.min.js"]="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract-worker.min.js"
+            ["docx.min.js"]="https://cdnjs.cloudflare.com/ajax/libs/docx/7.8.2/docx.min.js"
+            ["FileSaver.min.js"]="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"
+          )
+
+          for file in "${!files[@]}"; do
+            echo "Downloading $file..."
+            wget --tries=3 --timeout=30 -q "${files[$file]}" -O "docs/lib/$file" || echo "Failed to download $file"
+          done
+
+          # Download language data
+          declare -A languages=(
+            ["eng.traineddata"]="eng"
+            ["fra.traineddata"]="fra"
+            ["spa.traineddata"]="spa"
+            ["deu.traineddata"]="deu"
+          )
+
+          for file in "${!languages[@]}"; do
+            echo "Downloading $file..."
+            wget --tries=3 --timeout=30 -q "https://github.com/naptha/tessdata/raw/gh-pages/4.0.0/${languages[$file]}.traineddata" -O "docs/tessdata/$file" || echo "Failed to download $file"
+          done
+
+      - name: Commit and push changes
+        run: |
+          # Check if there are any changes
+          git status --porcelain
           
-          # Check if there are changes to commit
-          git add docs/lib/ docs/tessdata/
-          if ! git diff --cached --quiet; then
-            git commit -m "Auto-download libraries [skip ci]"
-            git push
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Changes detected. Committing..."
+            git add docs/lib/ docs/tessdata/
+            git commit -m "Auto-update libraries [skip ci]"
+            
+            # Push changes with retry logic
+            attempts=0
+            max_attempts=3
+            
+            until [ $attempts -eq $max_attempts ] || git push; do
+              attempts=$((attempts+1))
+              echo "Push attempt $attempts failed. Retrying in 3 seconds..."
+              sleep 3
+              git pull --rebase  # Rebase if needed
+            done
+            
+            if [ $attempts -eq $max_attempts ]; then
+              echo "Failed to push after $max_attempts attempts"
+              exit 1
+            fi
           else
-            echo "No library changes to commit"
+            echo "No changes to commit"
           fi
