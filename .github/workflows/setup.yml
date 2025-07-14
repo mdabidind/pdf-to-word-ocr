@@ -1,0 +1,25 @@
+name: Setup Libraries
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  download-libs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Download libraries
+        run: |
+          chmod +x download-libs.sh
+          ./download-libs.sh
+          
+      - name: Commit changes
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add .
+          git commit -m "Auto-download libraries" || echo "No changes to commit"
+          git push
