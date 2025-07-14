@@ -1,73 +1,62 @@
-name: Setup Libraries
+name: Deploy PDF to Word Converter
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  download-libs:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
     steps:
-      - name: Checkout with full history
+      # Step 1: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0  # Required for proper deployment
+          submodules: recursive  # Important for Tesseract.js
 
-      - name: Setup Git identity
+      # Step 2: Verify critical files exist
+      - name: Validate required files
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-
-      - name: Download libraries (with checksum verification)
-        run: |
-          mkdir -p docs/lib docs/tessdata
+          REQUIRED_FILES=(
+            "docs/index.html"
+            "docs/script.js"
+            "docs/lib/pdf.min.js"
+            "docs/lib/tesseract.min.js"
+            "docs/tessdata/eng.traineddata"
+          )
           
-          # Download with checksum verification
-          download_with_verify() {
-            local url=$1
-            local dest=$2
-            local checksum=$3
-            
-            for i in {1..3}; do
-              if wget -q "$url" -O "$dest"; then
-                if [ -n "$checksum" ]; then
-                  echo "$checksum $dest" | sha256sum -c --quiet && return 0
-                  echo "Checksum verification failed for $dest"
-                else
-                  return 0
-                fi
-              fi
-              sleep 3
-            done
-            return 1
-          }
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Missing required file: $file"
+              exit 1
+            fi
+          done
+          echo "✅ All required files present"
 
-          # PDF.js
-          download_with_verify \
-            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js" \
-            "docs/lib/pdf.min.js" \
-            "a1d4a5a5e5b5e5b5e5b5e5b5e5b5e5b5e5b5e5b5e5b5e5b5e5b5e5b5e5b5e5b"
+      # Step 3: Set up GitHub Pages
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v4
 
-          # Add other downloads similarly...
+      # Step 4: Prepare deployment package
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "docs/"
+          retention-days: 1  # Reduces storage usage
 
-      - name: Commit and push changes
-        run: |
-          # Only proceed if there are changes
-          if [ -z "$(git status --porcelain docs/lib/ docs/tessdata/)" ]; then
-            echo "No changes to commit"
-            exit 0
-          fi
-
-          git add docs/lib/ docs/tessdata/
-          git commit -m "Auto-update libraries [skip ci]"
-          
-          # Force push to ensure completion
-          git push origin HEAD:main || \
-            (git pull --rebase origin main && git push origin HEAD:main)
+      # Step 5: Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        timeout-minutes: 5  # Prevent hanging deployments
