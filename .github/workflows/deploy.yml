@@ -2,32 +2,42 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: ["main"]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
 jobs:
-  deploy:
+  build-deploy:
     runs-on: ubuntu-latest
-    needs: setup  # Wait for the setup job to complete
-    
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
-        
-      - name: Verify libraries exist
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify files
         run: |
-          if [ ! -f "docs/lib/pdf.min.js" ]; then
-            echo "Error: Libraries not found!"
+          ls -la docs/
+          if [ ! -f docs/index.html ]; then
+            echo "❌ Missing index.html in docs/"
             exit 1
           fi
-          
+
       - name: Setup Pages
-        uses: actions/configure-pages@v3
-        
+        uses: actions/configure-pages@v4
+
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: 'docs/'
-          
+          path: "docs/"
+
       - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4
