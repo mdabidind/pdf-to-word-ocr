@@ -1,47 +1,28 @@
-name: Deploy Static Site to GitHub Pages
+name: Deploy Converter
 
-on:
-  push:
-    branches: ["main"]
-  workflow_dispatch:
-
-permissions:
-  pages: write
-  id-token: write
+on: [push, workflow_dispatch]
 
 jobs:
-  build-deploy:
+  deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Required for proper deployment
-
-      - name: Verify required files
+          submodules: recursive
+          
+      - name: Verify Libraries
         run: |
-          if [ ! -d "docs" ]; then
-            echo "::error::Missing docs directory"
+          if [ ! -f "docs/lib/pdf.min.js" ]; then
+            echo "::error::Missing PDF.js library"
             exit 1
           fi
-          if [ ! -f "docs/index.html" ]; then
-            echo "::error::Missing docs/index.html"
+          if [ ! -f "docs/lib/tesseract.min.js" ]; then
+            echo "::error::Missing Tesseract.js library"
             exit 1
           fi
-          echo "✅ All required files present"
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+          
+      - uses: actions/upload-pages-artifact@v3
         with:
-          path: "docs/"
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          path: 'docs'
+          
+      - uses: actions/deploy-pages@v4
