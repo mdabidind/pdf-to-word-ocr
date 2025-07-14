@@ -1,0 +1,17 @@
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore Node/npm files
+node_modules/
+npm-debug.log
+
+# Ignore IDE files
+.idea/
+.vscode/
+*.swp
+
+# Ignore local test files
+test/
+temp/
+*.tmp
