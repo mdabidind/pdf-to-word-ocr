@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "test": "if [ ! -f docs/index.html ]; then echo '❌ Missing index.html'; exit 1; fi && echo '✅ All files present'"
+  }
+}
