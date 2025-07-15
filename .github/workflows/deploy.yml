@@ -1,28 +1,26 @@
-name: Deploy Converter
+name: deploy
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [ main ]     # or "master" if that’s your default
 
 jobs:
-  deploy:
+  gh-pages:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v3
+
+      # No build step — skip if you don’t use npm / bundlers
+      # If you DO need a build, insert it here and point publish_dir below
+      # to your output folder.
+
+      - name: Publish to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          submodules: recursive
-          
-      - name: Verify Libraries
-        run: |
-          if [ ! -f "docs/lib/pdf.min.js" ]; then
-            echo "::error::Missing PDF.js library"
-            exit 1
-          fi
-          if [ ! -f "docs/lib/tesseract.min.js" ]; then
-            echo "::error::Missing Tesseract.js library"
-            exit 1
-          fi
-          
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: 'docs'
-          
-      - uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./         # folder that contains index.html
+          # recommended safety flags
+          enable_jekyll: false    # keeps files starting with '_'
+          force_orphan: true      # wipes old history to avoid conflicts
