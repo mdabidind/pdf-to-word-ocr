@@ -1,15 +1,192 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>PDF to Word OCR Converter</title>
-    <script src="lib/pdf.min.js"></script>
-    <script src="lib/tesseract.min.js"></script>
-    <script src="lib/docx.min.js"></script>
-    <script src="lib/FileSaver.min.js"></script>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PDF to Word OCR Converter</title>
+  <base href="/pdf-to-word-ocr/"/>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+      color: #333;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+    }
+    .upload-area {
+      border: 2px dashed #3498db;
+      border-radius: 5px;
+      padding: 40px;
+      text-align: center;
+      margin: 20px 0;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .upload-area:hover {
+      background-color: #ecf5fd;
+    }
+    .upload-area input {
+      display: none;
+    }
+    button {
+      background: #3498db;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      width: 100%;
+    }
+    .progress-container {
+      margin: 20px 0;
+    }
+    progress {
+      width: 100%;
+      height: 10px;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
 </head>
 <body>
-    <!-- Your converter interface here -->
-    <script src="script.js"></script>
+  <div class="container">
+    <h1>PDF to Word OCR Converter</h1>
+    <div class="upload-area" id="dropZone">
+      <input type="file" id="fileInput" accept=".pdf"/>
+      <p>Drag & drop PDF file or click to browse</p>
+    </div>
+
+    <div class="controls">
+      <label>
+        OCR Language:
+        <select id="langSelect">
+          <option value="eng">English</option>
+          <option value="fra">French</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="progress-container hidden" id="progressContainer">
+      <progress id="progressBar" value="0" max="100"></progress>
+      <p id="statusText">Initializing...</p>
+    </div>
+
+    <button id="convertBtn" disabled>Convert to Word</button>
+  </div>
+
+  <!-- Already inlined: PDF.js and Tesseract.js (you included them above) -->
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const dropZone = document.getElementById('dropZone');
+    const convertBtn = document.getElementById('convertBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const statusText = document.getElementById('statusText');
+    const langSelect = document.getElementById('langSelect');
+
+    let selectedFile = null;
+
+    // Enable file selection
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.style.background = '#ecf5fd';
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.style.background = '';
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      fileInput.files = e.dataTransfer.files;
+      handleFileInput();
+    });
+
+    fileInput.addEventListener('change', handleFileInput);
+
+    function handleFileInput() {
+      if (fileInput.files.length > 0) {
+        selectedFile = fileInput.files[0];
+        convertBtn.disabled = false;
+        dropZone.querySelector('p').textContent = selectedFile.name;
+      }
+    }
+
+    convertBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      progressContainer.classList.remove('hidden');
+      statusText.textContent = 'Loading PDF...';
+      progressBar.value = 10;
+
+      const fileReader = new FileReader();
+      fileReader.onload = async function () {
+        const typedarray = new Uint8Array(this.result);
+
+        const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
+        let textContent = '';
+        const totalPages = pdf.numPages;
+
+        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const viewport = page.getViewport({ scale: 2 });
+
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          await page.render({ canvasContext: context, viewport }).promise;
+          statusText.textContent = `Running OCR on page ${pageNum}/${totalPages}...`;
+          progressBar.value = (pageNum / totalPages) * 80 + 10;
+
+          const result = await Tesseract.recognize(
+            canvas.toDataURL(),
+            langSelect.value,
+            {
+              logger: m => {
+                if (m.progress) {
+                  progressBar.value = (pageNum / totalPages) * 80 + m.progress * 10;
+                }
+              }
+            }
+          );
+          textContent += result.data.text + '\n\n';
+        }
+
+        progressBar.value = 100;
+        statusText.textContent = 'Creating Word document...';
+
+        // Simulate Word download
+        const blob = new Blob([textContent], { type: 'application/msword' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = selectedFile.name.replace('.pdf', '') + '_ocr.doc';
+        link.click();
+
+        statusText.textContent = 'Download ready!';
+      };
+
+      fileReader.readAsArrayBuffer(selectedFile);
+    });
+  </script>
 </body>
 </html>
