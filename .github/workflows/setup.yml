@@ -1,62 +1,31 @@
-name: Deploy PDF to Word Converter
+name: build-and-deploy
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+    branches:
+      - main  # or "master" depending on your default branch
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    
+
     steps:
-      # Step 1: Checkout code
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Required for proper deployment
-          submodules: recursive  # Important for Tesseract.js
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      # Step 2: Verify critical files exist
-      - name: Validate required files
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install and build
         run: |
-          REQUIRED_FILES=(
-            "docs/index.html"
-            "docs/script.js"
-            "docs/lib/pdf.min.js"
-            "docs/lib/tesseract.min.js"
-            "docs/tessdata/eng.traineddata"
-          )
-          
-          for file in "${REQUIRED_FILES[@]}"; do
-            if [ ! -f "$file" ]; then
-              echo "::error::Missing required file: $file"
-              exit 1
-            fi
-          done
-          echo "✅ All required files present"
+          npm install
+          npm run build
+          npx next export  # If using Next.js
 
-      # Step 3: Set up GitHub Pages
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v4
-
-      # Step 4: Prepare deployment package
-      - name: Upload site artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: "docs/"
-          retention-days: 1  # Reduces storage usage
-
-      # Step 5: Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-        timeout-minutes: 5  # Prevent hanging deployments
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./out  # or dist or public
