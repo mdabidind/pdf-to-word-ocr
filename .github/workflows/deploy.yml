@@ -1,26 +1,21 @@
-name: deploy
+name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]     # or "master" if that’s your default
+    branches:
+      - main
 
 jobs:
-  gh-pages:
+  deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout source
+      - name: Checkout main branch
         uses: actions/checkout@v3
 
-      # No build step — skip if you don’t use npm / bundlers
-      # If you DO need a build, insert it here and point publish_dir below
-      # to your output folder.
-
-      - name: Publish to GitHub Pages
+      - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./         # folder that contains index.html
-          # recommended safety flags
-          enable_jekyll: false    # keeps files starting with '_'
-          force_orphan: true      # wipes old history to avoid conflicts
+          publish_dir: ./        # Make sure index.html is in the root
+          enable_jekyll: false   # Optional: avoids GitHub Pages processing
+          force_orphan: true     # Cleans previous history to avoid errors
